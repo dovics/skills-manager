@@ -13,9 +13,24 @@ pub struct Config {
     #[serde(default)]
     pub tools: HashMap<String, ToolConfig>,
 
-    /// Managed skills
+    /// ClawHub configuration
     #[serde(default)]
-    pub skills: HashMap<String, SkillConfig>,
+    pub clawhub: ClawHubConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ClawHubConfig {
+    /// ClawHub API token
+    #[serde(default)]
+    pub token: Option<String>,
+
+    /// ClawHub registry URL
+    #[serde(default = "default_clawhub_registry")]
+    pub registry: String,
+}
+
+fn default_clawhub_registry() -> String {
+    "https://clawhub.ai/api/v1".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,17 +50,13 @@ pub struct ToolConfig {
     pub priority: i32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SkillConfig {
+#[derive(Debug, Clone)]
+pub struct SkillInfo {
     /// Skill name
     pub name: String,
 
-    /// Original path (where symlink will be created)
+    /// Path to the skill in workspace
     pub path: PathBuf,
-
-    /// Tool name (optional)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tool: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -61,9 +72,12 @@ impl Default for Config {
         let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
 
         Config {
-            workspace: PathBuf::from(format!("{}/.skills/workspace", home)),
+            workspace: PathBuf::from(format!("{}/.skills", home)),
             tools: HashMap::new(),
-            skills: HashMap::new(),
+            clawhub: ClawHubConfig {
+                token: None,
+                registry: default_clawhub_registry(),
+            },
         }
     }
 }
@@ -78,7 +92,7 @@ impl Config {
     /// Get default workspace path
     pub fn default_workspace_path() -> PathBuf {
         let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
-        PathBuf::from(format!("{}/.skills/workspace", home))
+        PathBuf::from(format!("{}/.skills", home))
     }
 
     /// Load config from file
@@ -150,60 +164,52 @@ impl Config {
         Ok(())
     }
 
-    /// Add a skill to the configuration
-    pub fn add_skill(
-        &mut self,
-        name: &str,
-        path: &Path,
-        tool: Option<&str>,
-    ) -> Result<(), SkillsError> {
-        if self.skills.contains_key(name) {
-            return Err(ConfigError(format!("Skill already exists: {}", name)));
+    /// List all skills from workspace (dynamic scan)
+    pub fn list_skills(&self) -> Vec<SkillInfo> {
+        if !self.workspace.exists() {
+            return Vec::new();
         }
 
-        self.skills.insert(
-            name.to_string(),
-            SkillConfig {
-                name: name.to_string(),
-                path: path.to_path_buf(),
-                tool: tool.map(|s| s.to_string()),
-            },
-        );
+        let mut skills = Vec::new();
 
-        Ok(())
-    }
+        // Scan workspace for skill directories
+        if let Ok(entries) = fs::read_dir(&self.workspace) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let path = entry.path();
 
-    /// Remove a skill from the configuration
-    pub fn remove_skill(&mut self, name: &str) -> Result<(), SkillsError> {
-        self.skills
-            .remove(name)
-            .ok_or_else(|| ConfigError(format!("Skill not found: {}", name)))?;
+                // Only consider directories
+                if !path.is_dir() {
+                    continue;
+                }
 
-        Ok(())
-    }
+                // Check if it's a skill (has SKILL.md)
+                if path.join("SKILL.md").exists() {
+                    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                        skills.push(SkillInfo {
+                            name: name.to_string(),
+                            path,
+                        });
+                    }
+                }
+            }
+        }
 
-    /// Get a skill by name
-    pub fn get_skill(&self, name: &str) -> Result<SkillConfig, SkillsError> {
-        self.skills
-            .get(name)
-            .cloned()
-            .ok_or_else(|| SkillsError::SkillNotFound(name.to_string()))
-    }
-
-    /// List all skills
-    pub fn list_skills(&self) -> Vec<SkillConfig> {
-        let mut skills: Vec<_> = self.skills.values().cloned().collect();
         skills.sort_by(|a, b| a.name.cmp(&b.name));
         skills
     }
 
-    /// Get skills by tool
-    pub fn get_skills_by_tool(&self, tool: &str) -> Vec<SkillConfig> {
-        self.skills
-            .values()
-            .filter(|s| s.tool.as_deref() == Some(tool))
-            .cloned()
-            .collect()
+    /// Get a skill by name from workspace
+    pub fn get_skill(&self, name: &str) -> Option<SkillInfo> {
+        let skill_path = self.workspace.join(name);
+
+        if skill_path.exists() && skill_path.join("SKILL.md").exists() {
+            Some(SkillInfo {
+                name: name.to_string(),
+                path: skill_path,
+            })
+        } else {
+            None
+        }
     }
 
     /// Get paths to scan for skills
@@ -251,9 +257,8 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = Config::default();
-        assert!(config.workspace.ends_with(".skills/workspace"));
+        assert!(config.workspace.ends_with(".skills"));
         assert!(config.tools.is_empty());
-        assert!(config.skills.is_empty());
     }
 
     #[test]
@@ -261,14 +266,5 @@ mod tests {
         let mut config = Config::default();
         config.add_tool("test-tool", Path::new("/tmp/test")).unwrap();
         assert!(config.tools.contains_key("test-tool"));
-    }
-
-    #[test]
-    fn test_add_skill() {
-        let mut config = Config::default();
-        config
-            .add_skill("test-skill", Path::new("/tmp/skill"), None)
-            .unwrap();
-        assert!(config.skills.contains_key("test-skill"));
     }
 }

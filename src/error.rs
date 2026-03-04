@@ -5,9 +5,6 @@ pub enum SkillsError {
     #[error("Path not found: {0}")]
     PathNotFound(String),
 
-    #[error("Invalid skill format: {0}")]
-    InvalidSkillFormat(String),
-
     #[error("Skill already exists: {0}")]
     SkillAlreadyExists(String),
 

@@ -36,15 +36,26 @@ pub enum Commands {
 
     /// Add a skill to the workspace
     Add {
-        /// Name of the skill
-        name: String,
+        /// Name of the skill (auto-detected from path if not provided)
+        #[arg(short, long)]
+        name: Option<String>,
 
-        /// Path to the skill directory
+        /// Path to the skill directory, GitHub repository URL, or ClawHub slug/URL
+        ///
+        /// Supports:
+        /// - Local path: /path/to/skill
+        /// - GitHub URL: https://github.com/user/repo
+        /// - ClawHub slug: clawhub:skill-name
+        /// - ClawHub URL: https://clawhub.ai/user/skill-name
         path: String,
 
         /// Tool name (claude-code, openclaw, etc.)
         #[arg(short, long)]
         tool: Option<String>,
+
+        /// Keep the cloned repository (default: false, will delete after installation)
+        #[arg(long)]
+        keep: bool,
     },
 
     /// Remove a skill from management
