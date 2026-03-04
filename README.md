@@ -76,7 +76,6 @@ tools:
     name: claude-code
     path: ~/.claude/skills
     enabled: true
-    priority: 10
 ```
 
 ### 3. 配置 ClawHub Token（可选）
@@ -322,13 +321,11 @@ tools:
     name: claude-code
     path: ~/.claude/skills
     enabled: true
-    priority: 10
 
   openclaw:
     name: openclaw
     path: ~/.openclaw/skills
     enabled: true
-    priority: 5
 ```
 
 **注意**：技能列表不再保存在配置文件中，而是每次运行时从工作空间动态扫描。

@@ -44,10 +44,6 @@ pub struct ToolConfig {
     /// Whether the tool is enabled
     #[serde(default = "default_true")]
     pub enabled: bool,
-
-    /// Priority for loading (higher = first)
-    #[serde(default = "default_priority")]
-    pub priority: i32,
 }
 
 #[derive(Debug, Clone)]
@@ -61,10 +57,6 @@ pub struct SkillInfo {
 
 fn default_true() -> bool {
     true
-}
-
-fn default_priority() -> i32 {
-    5
 }
 
 impl Default for Config {
@@ -148,7 +140,6 @@ impl Config {
                 name: name.to_string(),
                 path: path.to_path_buf(),
                 enabled: true,
-                priority: 5,
             },
         );
 
