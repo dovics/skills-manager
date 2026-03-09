@@ -1,7 +1,11 @@
 use crate::error::SkillsError;
 use anyhow::{Context, Result};
 use std::fs;
-use std::os::unix::fs::symlink;
+#[cfg(unix)]
+use std::os::unix::fs::symlink as symlink_dir;
+
+#[cfg(windows)]
+use std::os::windows::fs::symlink_dir;
 use std::path::{Path, PathBuf};
 
 /// Move a skill from source to destination
@@ -63,7 +67,7 @@ pub async fn create_symlink(source: &Path, dest: &Path) -> Result<()> {
     }
 
     // Create the symlink
-    symlink(source, dest).with_context(|| {
+    symlink_dir(source, dest).with_context(|| {
         format!(
             "Failed to create symlink from {} to {}",
             source.display(),

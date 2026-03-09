@@ -59,12 +59,25 @@ fn default_true() -> bool {
     true
 }
 
+/// Get the user's home directory in a cross-platform way.
+/// On Unix this is $HOME; on Windows $USERPROFILE (or $HOMEPATH as fallback).
+fn home_dir() -> String {
+    #[cfg(windows)]
+    {
+        env::var("USERPROFILE")
+            .or_else(|_| env::var("HOMEPATH"))
+            .unwrap_or_else(|_| ".".to_string())
+    }
+    #[cfg(not(windows))]
+    {
+        env::var("HOME").unwrap_or_else(|_| ".".to_string())
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
-        let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
-
         Config {
-            workspace: PathBuf::from(format!("{}/.skills", home)),
+            workspace: Self::default_workspace_path(),
             tools: HashMap::new(),
             clawhub: ClawHubConfig {
                 token: None,
@@ -77,14 +90,22 @@ impl Default for Config {
 impl Config {
     /// Get default config path
     pub fn default_path() -> PathBuf {
-        let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
-        PathBuf::from(format!("{}/.config/skills/config.yaml", home))
+        #[cfg(windows)]
+        {
+            // On Windows: %APPDATA%\skills\config.yaml
+            // e.g. C:\Users\<user>\AppData\Roaming\skills\config.yaml
+            let app_data = env::var("APPDATA").unwrap_or_else(|_| home_dir());
+            PathBuf::from(format!("{}\\skills\\config.yaml", app_data))
+        }
+        #[cfg(not(windows))]
+        {
+            PathBuf::from(format!("{}/.config/skills/config.yaml", home_dir()))
+        }
     }
 
     /// Get default workspace path
     pub fn default_workspace_path() -> PathBuf {
-        let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
-        PathBuf::from(format!("{}/.skills", home))
+        PathBuf::from(format!("{}/.skills", home_dir()))
     }
 
     /// Load config from file
@@ -218,7 +239,7 @@ impl Config {
 
     /// Auto-discover tools and add them to config
     pub fn discover_tools(&mut self) -> Result<Vec<String>, SkillsError> {
-        let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
+        let home = home_dir();
         let mut discovered = Vec::new();
 
         // Common tool paths
@@ -226,7 +247,7 @@ impl Config {
             ("claude-code", format!("{}/.claude/skills", home)),
             ("openclaw", format!("{}/.openclaw/skills", home)),
             ("zeroclaw", format!("{}/.zeroclaw/skills", home)),
-            ("npx-skills", format!("{}/.agents/skills", home))
+            ("npx-skills", format!("{}/.agents/skills", home)),
         ];
 
         for (name, path) in tool_paths {
@@ -255,7 +276,9 @@ mod tests {
     #[test]
     fn test_add_tool() {
         let mut config = Config::default();
-        config.add_tool("test-tool", Path::new("/tmp/test")).unwrap();
+        config
+            .add_tool("test-tool", Path::new("/tmp/test"))
+            .unwrap();
         assert!(config.tools.contains_key("test-tool"));
     }
 }
